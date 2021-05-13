@@ -1,0 +1,5 @@
+package gowebpusher
+
+func init() {
+
+}

@@ -13,3 +13,7 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+.github/logo.psd
+coverage.txt
+codecov.txt
+.DS_Store
