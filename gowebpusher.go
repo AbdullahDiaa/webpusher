@@ -2,9 +2,12 @@
 package gowebpusher
 
 import (
+	"bytes"
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
+	"io"
 )
 
 //PushSubscription interface of the Push API provides a subscription's URL endpoint.
@@ -41,8 +44,40 @@ func (s *Sender) Initialize() {
 
 //Send will deliver the notification to all subscriptions
 func (s *Sender) Send() int {
+	for _, sub := range s.PushSubscriptions {
+		s.sendNotification([]byte("Test Notification"), &sub)
+	}
 	//Testing return
 	return len(s.PushSubscriptions)
+}
+
+func (s *Sender) sendNotification(message []byte, sub *PushSubscription) {
+
+	// source: https://developers.google.com/web/fundamentals/push-notifications/web-push-protocol
+
+	// Step1: Generate P256dh
+	var P256dh []byte
+	buf := bytes.NewBufferString(sub.key.P256dh)
+	P256dh, err := base64.StdEncoding.DecodeString(buf.String())
+	if err != nil {
+		P256dh, _ = base64.URLEncoding.DecodeString(buf.String())
+	}
+
+	// Step 2: Get authentication key from PushSubscriptionKey.Auth
+	var authKey []byte
+	buf = bytes.NewBufferString(sub.key.Auth)
+	authKey, err = base64.StdEncoding.DecodeString(buf.String())
+	if err != nil {
+		authKey, _ = base64.URLEncoding.DecodeString(buf.String())
+	}
+
+	// Step 3: Generate random salt
+	// The salt needs to be 16 bytes of random data.
+	salt := make([]byte, 16)
+	_, err = io.ReadFull(rand.Reader, salt)
+
+	//Test Print !!
+	fmt.Println(P256dh, authKey, salt)
 }
 
 //GenerateVAPID will generate public and private VAPID keys using ECDH protocl
