@@ -21,7 +21,7 @@
 <tr>
 <th><strong>Browser</strong></th>
 <th><strong>Supported version</strong></th>
-<th><strong>Notes</strong></th>
+<th><strong>Endpoint</strong></th>
 </tr>
 </thead>
 <tbody>
@@ -30,7 +30,7 @@
 
 <td>✓ 60+</td>
 
-<td></td>
+<td><code>https://fcm.googleapis.com/fcm/send/{subId}</code></td>
 </tr>
 
 <tr>
@@ -38,7 +38,7 @@
 
 <td>✓ 17+</td>
 
-<td></td>
+<td><code>https://par02p.notify.windows.com/w/?token={subId}</code></td>
 </tr>
 
 <tr>
@@ -46,15 +46,34 @@
 
 <td>✓ 55+</td>
 
-<td></td>
+<td><code>https://updates.push.services.mozilla.com/wpush/v2/{subId}</code></td>
 </tr>
+
+<tr>
+<td>Vivaldi</td>
+
+<td>✓ 17+</td>
+
+<td><code>https://fcm.googleapis.com/fcm/send/{subId}</code></td>
+</tr>
+
 
 <tr>
 <td>Opera</td>
 
 <td>✓ 76+</td>
 
-<td></td>
+<td><code>https://fcm.googleapis.com/fcm/send/{subId}</code></td>
+
+</tr>
+
+
+<tr>
+<td>Yandex</td>
+
+<td>✓ 21+</td>
+
+<td><code>https://fcm.googleapis.com/fcm/send/{subId}</code></td>
 
 </tr>
 
