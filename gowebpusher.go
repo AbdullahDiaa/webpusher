@@ -4,18 +4,26 @@ package gowebpusher
 import (
 	"bytes"
 	"crypto"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/hkdf"
 )
 
 //PushSubscription interface of the Push API provides a subscription's URL endpoint.
@@ -38,8 +46,8 @@ type VAPIDKeys struct {
 }
 
 //PushSubscriptionKey represents a client public key, which can then be sent to a server and used in encrypting push message data.
-// P256dh: An Elliptic curve Diffie–Hellman public key on the P-256 curve (that is, the NIST secp256r1 elliptic curve).  The resulting key is an uncompressed point in ANSI X9.62 format.
-// Auth: An authentication secret, as described in Message Encryption for Web Push.
+// P256dh: 🔒 Receiver public key (‘p256dh’): The p256dh key received as part of the Subscription data.
+// Auth: 🔑  Auth key (‘auth’): Auth key The auth key received as part of the Subscription data.
 type PushSubscriptionKey struct {
 	P256dh string
 	Auth   string
@@ -60,26 +68,70 @@ func (s *Sender) Initialize() {
 //Send will deliver the notification to all subscriptions
 func (s *Sender) Send() int {
 	for _, sub := range s.PushSubscriptions {
-		res, err := s.sendNotification([]byte("Hey 3"), &sub)
+		res, err := s.sendNotification([]byte("Send a message to browser"), &sub)
 		fmt.Println(res, err)
 	}
 	//Testing return
 	return len(s.PushSubscriptions)
 }
 
+//sendNotification ..
 func (s *Sender) sendNotification(message []byte, sub *PushSubscription) (*http.Response, error) {
 	//VAPID keys
 	VAPIDkeys := VAPIDKeys{
 		s.VAPIDPublicKey, s.VAPIDPrivateKey,
 	}
 
-	payloadBuf := bytes.NewBuffer([]byte(""))
-
-	// POST request
-	req, err := http.NewRequest("POST", sub.Endpoint, payloadBuf)
+	// 🔒 Receiver public key [p256dh]
+	buf := bytes.NewBufferString(sub.key.P256dh)
+	receiverPubKey, err := base64.StdEncoding.DecodeString(buf.String())
+	//receiver Public Key must have "=" padding added back before it can be decoded.
+	if rem := len(receiverPubKey) % 4; rem != 0 {
+		buf.WriteString(strings.Repeat("=", 4-rem))
+	}
+	if err != nil {
+		receiverPubKey, err = base64.URLEncoding.DecodeString(buf.String())
+		if err != nil {
+			return nil, err
+		}
+	}
+	// Generate shared ECDH && local Public key
+	sharedECDH, localPubKey, err := generateSharedECDH(receiverPubKey)
 	if err != nil {
 		return nil, err
 	}
+
+	// 🔑  Auth key (‘auth’)
+	// Auth key: The auth key received as part of the Subscription data.
+	secretBuf := bytes.NewBufferString(sub.key.Auth)
+	if rem := len(sub.key.Auth) % 4; rem != 0 {
+		secretBuf.WriteString(strings.Repeat("=", 4-rem))
+	}
+	authKey, err := base64.StdEncoding.DecodeString(secretBuf.String())
+	if err != nil {
+		authKey, _ = base64.URLEncoding.DecodeString(secretBuf.String())
+	}
+
+	// Encrypt payload
+	encryptionHeaderBuf, encryptedPayload, err := encryptPayload(message, localPubKey, receiverPubKey, sharedECDH, authKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// POST notification request
+	req, err := http.NewRequest("POST", sub.Endpoint, encryptionHeaderBuf)
+	if err != nil {
+		return nil, err
+	}
+
+	//The TTL Header is the number of seconds the notification should stay in storage if the remote user agent isn’t actively connected.
+	//“0” (Zed/Zero) means that the notification is discarded immediately if the remote user agent is not connected; this is the default.
+	//This header must be specified, even if the value is “0”.
+	req.Header.Set("TTL", strconv.Itoa(30))
+
+	req.Header.Set("Content-Encoding", "aes128gcm")
+	req.Header.Set("Content-Length", strconv.Itoa(len(encryptedPayload)))
+	req.Header.Set("Content-Type", "application/octet-stream")
 
 	//Generate VAPID Authorization header which contains JWT signed token and VAPID public key
 	subscriptionURL, _ := url.Parse(sub.Endpoint)
@@ -88,7 +140,7 @@ func (s *Sender) sendNotification(message []byte, sub *PushSubscription) (*http.
 		"exp": time.Now().Add(time.Hour * 12).Unix(),
 		"sub": "mailto:mail@mail.com"}
 
-	AuthorizationHeader, err := GenerateVAPIDAuth(VAPIDkeys, claims)
+	AuthorizationHeader, err := generateVAPIDAuth(VAPIDkeys, claims)
 	if err != nil {
 		return nil, err
 	}
@@ -210,6 +262,7 @@ func generateVAPIDAuth(keys VAPIDKeys, claims map[string]interface{}) (string, e
 	return VAPIDAuth, nil
 }
 
+//generateJWTSignature ..
 func generateJWTSignature(keys VAPIDKeys, JWTInfoAndData string) (string, error) {
 	// Signature is the third part of the token, which includes the data above signed with the private key
 	// Preparing ecdsa.PrivateKey for signing
@@ -275,43 +328,127 @@ func generateJWTSignature(keys VAPIDKeys, JWTInfoAndData string) (string, error)
 	return "." + strings.TrimRight(base64.URLEncoding.EncodeToString(out), "="), nil
 }
 
-//GenerateVAPIDAuth will generate Authorization header for web push notifications
-func GenerateVAPIDAuth(keys VAPIDKeys, claims map[string]interface{}) (string, error) {
+//ECDH a secure way to share public keys and generate a shared secret and local Public key
+func generateSharedECDH(receiverPubKey []byte) ([]byte, []byte, error) {
 
-	//Validate VAPID Keys
-	if err := validateVAPIDKeys(keys); err != nil {
-		return "", err
-	}
-
-	//Verify Claims
-	if err := verifyClaims(claims); err != nil {
-		return "", err
-	}
-
-	// JWTInfo is base64 Encoded {"typ":"JWT","alg":"ES256"} which is the first part of the JWT Token
-	JWTInfo := "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9."
-
-	// JWTData is the second part of the token which contains all the claims encoded in base64
-	jsonValue, err := json.Marshal(claims)
+	curve := elliptic.P256()
+	localPrivateKey, x, y, err := elliptic.GenerateKey(curve, rand.Reader)
 	if err != nil {
-		return "", errors.New("Marshaling Claims JSON failed" + err.Error())
+		return nil, nil, err
 	}
-	JWTData := strings.TrimRight(base64.URLEncoding.EncodeToString(jsonValue), "=")
 
-	JWTSignature, err := generateJWTSignature(keys, JWTInfo+JWTData)
+	// Get the shared x,y point using client/receiver's Public key and local private key
+	sharedX, sharedY := elliptic.Unmarshal(curve, receiverPubKey)
+	if sharedX == nil {
+		return nil, nil, errors.New("Invalid Public key")
+	}
+
+	sx, sy := curve.ScalarMult(sharedX, sharedY, localPrivateKey)
+	if !curve.IsOnCurve(sx, sy) {
+		return nil, nil, errors.New("Shared point is not on the curve")
+	}
+
+	sharedECDH := make([]byte, curve.Params().BitSize/8)
+	sx.FillBytes(sharedECDH)
+
+	return sharedECDH, elliptic.Marshal(curve, x, y), nil
+}
+
+//encryptPayload ..
+func encryptPayload(message []byte, localPubKey []byte, receiverPubKey []byte, sharedECDH []byte, authKey []byte) (*bytes.Buffer, []byte, error) {
+
+	// 🏭 Build using / derive
+	prkInfoBuf := bytes.NewBuffer([]byte("WebPush: info\x00"))
+	prkInfoBuf.Write(receiverPubKey)
+	prkInfoBuf.Write(localPubKey)
+
+	ikm, err := readKey(hkdf.New(sha256.New, sharedECDH, authKey, prkInfoBuf.Bytes()), 32)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
-	//Compose the JWT Token string
-	JWTString := JWTInfo + JWTData + JWTSignature
+	/******* the Encryption Key and Nonce *****/
+	// 	📎  salt
+	// The salt needs to be 16 bytes of random data.
+	salt := make([]byte, 16)
+	_, err = io.ReadFull(rand.Reader, salt)
+	if err != nil {
+		return nil, nil, err
+	}
 
-	// Construct the VAPID header
-	VAPIDAuth := fmt.Sprintf(
-		"vapid t=%s, k=%s",
-		JWTString,
-		keys.Public,
-	)
+	//Content-Encoding: aes128gcm
+	//🔓 = HKDF(💩 , “Content-Encoding: aes128gcm\x00” + ⚓).🏭(🙊)
+	// This is the scheme described in RFC 8188. It's supported in Firefox 55+ and Chrome 60+, and replaces the older aesgcm scheme from earlier drafts. This scheme includes the salt, record size, and sender public key in a binary header block in the payload.
+	encryptionKey, err := readKey(hkdf.New(sha256.New, ikm, salt, []byte("Content-Encoding: aes128gcm\x00")), 16)
+	if err != nil {
+		return nil, nil, err
+	}
 
-	return VAPIDAuth, nil
+	//🎲 message nonce
+	//🎲 = HKDF(💩 , “Content-Encoding: nonce\x00” + ⚓).🏭(🙊)
+	// The sender and receiver combine the PRK with a random 16-byte salt. The salt is generated by the sender, and shared with the receiver as part of the message payload.
+	nonceInfo := []byte("Content-Encoding: nonce\x00")
+	nonceHKDF := hkdf.New(sha256.New, ikm, salt, nonceInfo)
+	encryptionNonce, err := readKey(nonceHKDF, 12)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Cipher
+	c, err := aes.NewCipher(encryptionKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	gcm, err := cipher.NewGCM(c)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	encryptionHeaderBuf := bytes.NewBuffer(salt)
+
+	//The sender chunks the plaintext into fixed-size records, and includes this size in the message payload as the rs
+	rs := make([]byte, 4)
+	binary.BigEndian.PutUint32(rs, 4096)
+
+	encryptionHeaderBuf.Write(rs)
+	encryptionHeaderBuf.Write([]byte{byte(len(localPubKey))})
+	encryptionHeaderBuf.Write(localPubKey)
+
+	// 📄 Payload
+	payloadBuf := bytes.NewBuffer(message)
+
+	// The encrypter prefixes a “\x00\x00” to the data chunk, processes it completely, and then concatenates its encryption tag to the end of the completed chunk.
+	payloadBuf.Write([]byte("\x02"))
+
+	maxPadLen := (4096 - 16) - encryptionHeaderBuf.Len()
+	payloadLen := payloadBuf.Len()
+	if payloadLen > maxPadLen {
+		return nil, nil, errors.New("payload has exceeded the maximum length")
+	}
+
+	padLen := maxPadLen - payloadLen
+
+	padding := make([]byte, padLen)
+	payloadBuf.Write(padding)
+
+	// Compose the ciphertext
+	encryptedPayload := gcm.Seal([]byte{}, encryptionNonce, payloadBuf.Bytes(), nil)
+	encryptionHeaderBuf.Write(encryptedPayload)
+
+	return encryptionHeaderBuf, encryptedPayload, nil
+}
+
+//readKey will the key with specified length
+func readKey(hkdf io.Reader, length int) ([]byte, error) {
+	key := make([]byte, length)
+	n, err := io.ReadFull(hkdf, key)
+	if n != len(key) {
+		return key, errors.New("Read length doesn't match key length")
+	}
+	if err != nil {
+		return key, err
+	}
+
+	return key, nil
 }

@@ -16,9 +16,58 @@
 
 ## Supported browsers
 
-- Chrome
-- Firefox
-- Opera
+<table>
+<thead>
+<tr>
+<th><strong>Browser</strong></th>
+<th><strong>Supported version</strong></th>
+<th><strong>Notes</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Chrome</td>
+
+<td>✓ 60+</td>
+
+<td></td>
+</tr>
+
+<tr>
+<td>Edge</td>
+
+<td>✓ 17+</td>
+
+<td></td>
+</tr>
+
+<tr>
+<td>Firefox</td>
+
+<td>✓ 55+</td>
+
+<td></td>
+</tr>
+
+<tr>
+<td>Opera</td>
+
+<td>✓ 76+</td>
+
+<td></td>
+
+</tr>
+
+<tr>
+<td>Safari</td>
+
+<td>✗</td>
+
+<td>Safari supports <a href="https://developer.apple.com/notifications/safari-push-notifications/" target="_blank">a custom implementation</a> .<br /> <a href="https://developer.apple.com/videos/play/wwdc2013/614/" target="_blank">WWDC video by apple</a></td>
+</tr>
+
+</tbody>
+</table>
 
 ## Usage
 
