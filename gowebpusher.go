@@ -67,16 +67,23 @@ func (s *Sender) Initialize() {
 
 //Send will deliver the notification to all subscriptions
 func (s *Sender) Send() int {
+	subscriptionURL, _ := url.Parse("https://fcm.googleapis.com/fcm/send/")
+	claims := map[string]interface{}{
+		"aud": fmt.Sprintf("%s://%s", subscriptionURL.Scheme, subscriptionURL.Host),
+		"exp": time.Now().Add(time.Hour * 12).Unix(),
+		"sub": "mailto:mail@mail.com"}
+
 	for _, sub := range s.PushSubscriptions {
-		res, err := s.sendNotification([]byte("Send a message to browser"), &sub)
+		res, err := s.sendNotification([]byte("Send a message to browser"), &sub, claims)
 		fmt.Println(res, err)
 	}
+
 	//Testing return
 	return len(s.PushSubscriptions)
 }
 
-//sendNotification ..
-func (s *Sender) sendNotification(message []byte, sub *PushSubscription) (*http.Response, error) {
+//sendNotification will send a message/payload to a subscriber
+func (s *Sender) sendNotification(payload []byte, sub *PushSubscription, claims map[string]interface{}) (*http.Response, error) {
 	//VAPID keys
 	VAPIDkeys := VAPIDKeys{
 		s.VAPIDPublicKey, s.VAPIDPrivateKey,
@@ -113,7 +120,7 @@ func (s *Sender) sendNotification(message []byte, sub *PushSubscription) (*http.
 	}
 
 	// Encrypt payload
-	encryptionHeaderBuf, encryptedPayload, err := encryptPayload(message, localPubKey, receiverPubKey, sharedECDH, authKey)
+	encryptionHeaderBuf, encryptedPayload, err := encryptPayload(payload, localPubKey, receiverPubKey, sharedECDH, authKey)
 	if err != nil {
 		return nil, err
 	}
@@ -134,12 +141,6 @@ func (s *Sender) sendNotification(message []byte, sub *PushSubscription) (*http.
 	req.Header.Set("Content-Type", "application/octet-stream")
 
 	//Generate VAPID Authorization header which contains JWT signed token and VAPID public key
-	subscriptionURL, _ := url.Parse(sub.Endpoint)
-	claims := map[string]interface{}{
-		"aud": fmt.Sprintf("%s://%s", subscriptionURL.Scheme, subscriptionURL.Host),
-		"exp": time.Now().Add(time.Hour * 12).Unix(),
-		"sub": "mailto:mail@mail.com"}
-
 	AuthorizationHeader, err := generateVAPIDAuth(VAPIDkeys, claims)
 	if err != nil {
 		return nil, err
@@ -432,7 +433,7 @@ func encryptPayload(message []byte, localPubKey []byte, receiverPubKey []byte, s
 	padding := make([]byte, padLen)
 	payloadBuf.Write(padding)
 
-	// Compose the ciphertext
+	// Encrypt the payload using the content encryption key (CEK)
 	encryptedPayload := gcm.Seal([]byte{}, encryptionNonce, payloadBuf.Bytes(), nil)
 	encryptionHeaderBuf.Write(encryptedPayload)
 
