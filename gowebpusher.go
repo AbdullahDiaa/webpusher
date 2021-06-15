@@ -68,13 +68,14 @@ func (s *Sender) Initialize() {
 //Send will deliver the notification to all subscriptions
 func (s *Sender) Send() int {
 	subscriptionURL, _ := url.Parse("https://fcm.googleapis.com/fcm/send/")
+
 	claims := map[string]interface{}{
 		"aud": fmt.Sprintf("%s://%s", subscriptionURL.Scheme, subscriptionURL.Host),
 		"exp": time.Now().Add(time.Hour * 12).Unix(),
 		"sub": "mailto:mail@mail.com"}
 
 	for _, sub := range s.PushSubscriptions {
-		res, err := s.sendNotification([]byte("Send a message to browser"), &sub, claims)
+		res, err := s.sendNotification([]byte("{\"body\":\"Hello World\"}"), &sub, claims)
 		fmt.Println(res, err)
 	}
 
