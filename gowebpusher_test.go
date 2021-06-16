@@ -111,5 +111,4 @@ func TestVerifyClaims(t *testing.T) {
 		}
 		t.Logf("\t%s\tInvalid URL (non-https) format for Subscriber” field", succeed)
 	}
-
 }
