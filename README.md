@@ -10,6 +10,8 @@
 
 > Push notifications for the web browsers using Golang
 
+> ⚠️ Library still under active development 
+
 ## Features
 * [ ] Send push notifications to web browsers
 
