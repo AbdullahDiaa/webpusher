@@ -91,7 +91,7 @@ func (s *Sender) sendNotification(payload []byte, sub *PushSubscription, claims 
 	}
 
 	// 🔒 Receiver public key [p256dh]
-	buf := bytes.NewBufferString(sub.key.P256dh)
+	buf := bytes.NewBufferString(sub.Key.P256dh)
 	receiverPubKey, err := base64.StdEncoding.DecodeString(buf.String())
 	//receiver Public Key must have "=" padding added back before it can be decoded.
 	if rem := len(receiverPubKey) % 4; rem != 0 {
@@ -111,8 +111,8 @@ func (s *Sender) sendNotification(payload []byte, sub *PushSubscription, claims 
 
 	// 🔑  Auth key (‘auth’)
 	// Auth key: The auth key received as part of the Subscription data.
-	secretBuf := bytes.NewBufferString(sub.key.Auth)
-	if rem := len(sub.key.Auth) % 4; rem != 0 {
+	secretBuf := bytes.NewBufferString(sub.Key.Auth)
+	if rem := len(sub.Key.Auth) % 4; rem != 0 {
 		secretBuf.WriteString(strings.Repeat("=", 4-rem))
 	}
 	authKey, err := base64.StdEncoding.DecodeString(secretBuf.String())
