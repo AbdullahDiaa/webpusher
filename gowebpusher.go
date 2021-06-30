@@ -29,7 +29,7 @@ import (
 //PushSubscription interface of the Push API provides a subscription's URL endpoint.
 type PushSubscription struct {
 	Endpoint string
-	key      PushSubscriptionKey
+	Key      PushSubscriptionKey
 }
 
 //Sender instance
@@ -67,8 +67,8 @@ func (s *Sender) Initialize() {
 
 //Send will deliver the notification to all subscriptions
 func (s *Sender) Send() int {
-	subscriptionURL, _ := url.Parse("https://fcm.googleapis.com/fcm/send/")
 
+	subscriptionURL, _ := url.Parse("https://fcm.googleapis.com/fcm/send/")
 	claims := map[string]interface{}{
 		"aud": fmt.Sprintf("%s://%s", subscriptionURL.Scheme, subscriptionURL.Host),
 		"exp": time.Now().Add(time.Hour * 12).Unix(),
