@@ -1,4 +1,4 @@
-package gowebpusher
+package webpusher
 
 import (
 	"encoding/base64"

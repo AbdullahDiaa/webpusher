@@ -1,12 +1,12 @@
 <p align="center" width="100%">
-     <img alt="GOWebPusher - Push notifications for the web browsers using Golang" src=".github/logo.png"> 
+     <img alt="WebPusher - Push notifications for the web browsers using Golang" src=".github/logo.png"> 
 </p>
 
-# GoWebPusher
+# WebPusher
 
 [![GoDoc][godoc-image]][godoc-url]
-[![codecov](https://codecov.io/gh/AbdullahDiaa/GoWebPusher/branch/main/graph/badge.svg?token=70SJB4GC8E)](https://codecov.io/gh/AbdullahDiaa/GoWebPusher)
-[![Build Status](https://travis-ci.com/AbdullahDiaa/GoWebPusher.svg?token=xpANNwyiLEp99ynBzKhp&branch=main)](https://travis-ci.com/AbdullahDiaa/GoWebPusher)
+[![codecov](https://codecov.io/gh/AbdullahDiaa/webpusher/branch/main/graph/badge.svg?token=70SJB4GC8E)](https://codecov.io/gh/AbdullahDiaa/https://github.com/AbdullahDiaa/webpusher)
+[![Build Status](https://travis-ci.com/AbdullahDiaa/GoWebPusher.svg?token=xpANNwyiLEp99ynBzKhp&branch=main)](https://travis-ci.com/AbdullahDiaa/webpusher)
 
 > Push notifications for the web browsers using Golang
 

@@ -1,5 +1,5 @@
-//Package gowebpusher helps sending push notifications to web browsers
-package gowebpusher
+//Package webpusher helps sending push notifications to web browsers
+package webpusher
 
 import (
 	"bytes"

@@ -1,4 +1,4 @@
-module github.com/abdullahdiaa/gowebpusher
+module github.com/abdullahdiaa/webpusher
 
 go 1.16
 
